@@ -1,0 +1,12 @@
+3-1.
+According to the man page of reboot(), The set of magic numbers are
+
+magic number 	     	  decimal      hexadecimal        
+LINUX_REBOOT_MAGIC2    	  672274793    0x28121969
+LINUX_REBOOT_MAGIC2A   	  85072278     0x5121996
+LINUX_REBOOT_MAGIC2B   	  369367448    0x16041998
+LINUX_REBOOT_MAGIC2C   	  537993216    0x20112000
+
+It seems that the hexadecimal number of these magic numbers are
+dates. Maybe someone's birthday.
+
