@@ -23,7 +23,7 @@ void mytee(char *filename, int flags)
   if ((fd = open(filename, flags, S_IRUSR | S_IWUSR)) == -1) errExit("open");
   while((numRead = read(0, buf, len)) > 0){ /* Read from standard input fd = 0 */
     /* Write to standard output fd = 1 */
-    printf("numRead = %ld\n", (long)numRead);
+    //printf("numRead = %ld\n", (long)numRead);
     if (-1 == (numWritten = write(1, buf, numRead))) errExit("write1");
     /* Write to file */
     if (-1 == (numWritten = write(fd, buf, numRead))) errExit("write2");
