@@ -1,6 +1,6 @@
 include ../Makefile.inc
 
-GEN_EXE = 4_1 4_2
+GEN_EXE = 4_1
 
 LINUX_EXE = 
 
@@ -16,4 +16,4 @@ clean :
 showall :
 	@ echo ${EXE}
 
-${EXE} : ${LPLIB}		# True as a rough approximation
+${EXE} : ${LDLIB}		# True as a rough approximation

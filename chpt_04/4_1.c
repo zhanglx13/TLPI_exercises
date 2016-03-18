@@ -1,7 +1,8 @@
+
 #include <sys/stat.h>
 #include <fcntl.h>      // These two headers are for the file I/O syscalls
 #include <ctype.h>
-#include "../tlpi-dist/lib/tlpi_hdr.h"
+#include "tlpi_hdr.h"
 
 #define MAX_READ 20
 #define printable(ch) (isprint((unsigned char) ch) ? ch : '#')
