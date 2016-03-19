@@ -4,12 +4,42 @@
 #include <ctype.h>
 #include "tlpi_hdr.h"
 
+#define WRITE(BYTES)                        \
+    numWritten = write(fd, buf, BYTES);     \
+    if (numWritten == -1) errExit("write"); \
+
+#define LSEEK(BYTES)                        \
+    if (-1 == lseek(fd, BYTES, SEEK_CUR))   \
+        errExit("lseek");                   \
+
+#define PREPARE                                             \
+    int fd;                                                 \
+    size_t len = getBlkSize();                              \
+    ssize_t numWritten;                                     \
+    char *buf = (char*)malloc(len);                         \
+    if (buf == NULL) errExit("malloc");                     \
+    for (int i = 0 ; i < len ; i ++)                        \
+        buf[i] = 's';                                       \
+
+#define OPEN(filename)                                      \
+    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC,         \
+                S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |     \
+                S_IROTH | S_IWOTH);                         \
+    if (fd == -1) errExit("open");                          \
+
+
+#define RESULT(ID)                                                                          \
+    printf("Test %2d result: %s\n", ID, (mycp(argv[1], argv[2]) == 1) ? "PASS" : "FAIL" );  \
+
+#define CLEAN       \
+    free(buf);      \
+    close(fd);      \
 
 int getBlkSize();
 void displayStatInfo(struct stat *sb, const char *filename);
-void mycp(const char *src, const char *des);
+int mycp(const char *src, const char *des);
 
-
+ 
 int main(const int argc, const char **argv)
 {
 /*
@@ -17,53 +47,66 @@ int main(const int argc, const char **argv)
  * argv[1]  src file
  * argv[2]  des file
  */
-    struct stat sb;
-    int block_size = getBlkSize();
-    printf("block size of fs: %d\n", block_size);
-
     /* create the input file with holes like this
-    ----------------------------------------------------------------
-    | 4096 bytes of data | 4096 bytes of hole | 4096 bytes of data |
-    ----------------------------------------------------------------
      */
-    int fd;
-    size_t len = block_size;
-    ssize_t numWritten;
-    char *buf = (char *)malloc(len);
-    if (buf == NULL) errExit("malloc");
-    // open file
-    fd = open(argv[1], O_RDWR | O_CREAT | O_TRUNC, 
-                S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | 
-                S_IROTH | S_IWOTH);     /* rw-rw-rw- */
-    if(fd == -1) errExit("open");
-    // initialize buf
-    for (unsigned int i = 0; i < len ; i ++)
-        buf[i] = 's';
-    // write to file
-    numWritten = write(fd, buf, 5);
-    if (numWritten == -1) errExit("write");
-    // seek beyond the hole in the file
-    if (lseek(fd, block_size*2-5, SEEK_END) == -1)
-        errExit("lseek");
-    // write to file again
-    numWritten = write(fd, buf, 5);
-    if (numWritten == -1) errExit("write");
+    PREPARE
+    /* test 0 
+     * file size = 8197 bytes
+     * block size = 8192 bytes (two blocks)
+        ----------------------------------------------------------
+        | 5 data 4091 hole | 4096 bytes of hole | 5 data EOF     |
+        ----------------------------------------------------------  
+     */
+    OPEN(argv[1])
+    WRITE(5)    LSEEK(getBlkSize()*2-5) WRITE(5)
+    RESULT(0)
 
+    /* test 1 
+     * file size = 12289 bytes
+     * block size = 12288 bytes (3 blocks)
+        -----------------------------------------------------------------------------
+        | 5 data 4091 hole | 4096 bytes of hole | 5 data 4091 hole | 1 data EOF     |
+        -----------------------------------------------------------------------------  
+     */
+    OPEN(argv[1])
+    WRITE(5)    LSEEK(getBlkSize()*2-5) WRITE(5)    LSEEK(4091) WRITE(1)
+    RESULT(1)
 
-    // copy file including holes
-    mycp(argv[1], argv[2]);
+    /* test 2 
+     * file size = 12289 bytes
+     * block size = 16384 bytes (4 blocks)
+        -----------------------------------------------------------------------------
+        | 5 data 4091 hole | 5 data 4091 hole | 5 data 4091 hole | 1 data EOF     |
+        -----------------------------------------------------------------------------  
+     */
+    OPEN(argv[1])
+    WRITE(5) LSEEK(4091) WRITE(5)    LSEEK(4091) WRITE(5)    LSEEK(4091) WRITE(1)
+    RESULT(2)
 
-    // get stat of input and output file
-    if (stat(argv[1], &sb) == -1) errExit("stat");
-    displayStatInfo(&sb, argv[1]);
-    
-    if (stat(argv[2], &sb) == -1) errExit("stat");
-    displayStatInfo(&sb, argv[2]);
-    
-    free(buf);
-    close(fd);
+    /* test 3 
+     * file size = 4097 bytes
+     * block size = 8192 bytes (2 blocks)
+        -------------------------------------
+        | 5 data 4091 hole | 1 data EOF     |
+        ------------------------------------- 
+     */
+    OPEN(argv[1])
+    WRITE(5) LSEEK(4091) WRITE(1)
+    RESULT(3)
+
+    /* test 4 
+     * file size = 1 bytes
+     * block size = 4096 bytes (1 blocks)
+        -------------------------------------
+        | 4096 bytes of hole | 1 data EOF     |
+        ------------------------------------- 
+     */
+    OPEN(argv[1])
+    LSEEK(4096) WRITE(1)
+    RESULT(4)
+
+    CLEAN
     exit(EXIT_SUCCESS);
-
 }
 
 /*
@@ -102,10 +145,10 @@ void displayStatInfo(struct stat *sb, const char *filename)
  * Copy file src to file des.
  * If src has holes, also create holes in des
  */
-void mycp(const char *src, const char *des)
+int mycp(const char *src, const char *des)
 {
     int fdi, fdo;
-    struct stat sb;
+    struct stat sb1, sb2;
     unsigned int len;
     int buf_len = getBlkSize();
     char ch;
@@ -117,8 +160,8 @@ void mycp(const char *src, const char *des)
     fdo = open(des, O_WRONLY | O_TRUNC, /* remember to truncate the output file when opening */
                 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |
                 S_IROTH | S_IWOTH);     /* rw-rw-rw- */
-    if (fstat(fdi, &sb) == -1) errExit("fstat");
-    len = sb.st_size; // size of input file
+    if (fstat(fdi, &sb1) == -1) errExit("fstat");
+    len = sb1.st_size; // size of input file
     unsigned int offset = 0;
     ssize_t numRead, numWritten;
     // loop for each byte in the input file 
@@ -136,6 +179,17 @@ void mycp(const char *src, const char *des)
             if (numWritten == -1) errExit("write");
         }
     }
+    
+    // test result
+    if (fstat(fdo, &sb2) == -1) errExit("fstat");
+    if ((sb1.st_size == sb2.st_size) && (sb1.st_blocks == sb2.st_blocks))
+        return 1;
+    else{
+        printf("1 size = %d\t1 blocks = %d\n", (int)sb1.st_size, (int)sb1.st_blocks);
+        printf("2 size = %d\t2 blocks = %d\n", (int)sb2.st_size, (int)sb2.st_blocks);
+        return 0;
+    }
+
     free(buf);
     close(fdi);
     close(fdo);
