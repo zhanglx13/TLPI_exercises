@@ -1,6 +1,6 @@
 include ../Makefile.inc
 
-GEN_EXE = 4_1
+GEN_EXE = 4_1 4_2
 
 LINUX_EXE = 
 
