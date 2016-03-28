@@ -1,0 +1,1 @@
+This file is used as a temp file for collecting file stats for exercise 5.7
